@@ -18,6 +18,12 @@ cd ..
 cd ..
 ```
 
+Firstly, ensure that the environment can be imported into mujoco:  
+1. Reduce the color complexity of the ply mesh by quantizing the colors:  
+```python quantize_ply_colors.py Replica-Dataset/environments/office_0/mesh.ply office_0_quantized_smooth.ply <# rgb quantization buckets> 0```
+2. Convert the mesh into a mujoco-compatible environment (our solution was a colored submesh for every color in the environment):  
+```python ply_to_mjcf_submeshes.py office_0_quantized_smooth.ply office_0_quantized office_0```
+
 The flow of the Mesh Splatter is (example using office_0 environment):
 1. Create a gaussian splatting dataset 
 ```mkdir office_0_dataset```
