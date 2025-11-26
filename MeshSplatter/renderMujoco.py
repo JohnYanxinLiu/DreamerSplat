@@ -285,6 +285,10 @@ def main():
                        help="Vertical FOV in degrees (computed from fl_y if not specified)")
     parser.add_argument("--fov-scale", type=float, default=1.0,
                        help="Scale factor for FOV (use to adjust zoom if needed)")
+    parser.add_argument("--full-ambient", action="store_true", default=True,
+                       help="Use full ambient lighting (default: True)")
+    parser.add_argument("--no-full-ambient", action="store_false", dest="full_ambient",
+                       help="Disable full ambient lighting")
     
     args = parser.parse_args()
     
@@ -362,6 +366,13 @@ def main():
         
         # Set camera FOV
         model.cam_fovy[0] = fov_y
+        
+        # Configure lighting
+        if args.full_ambient:
+            # Set full ambient lighting (no shadows, uniform illumination)
+            model.vis.headlight.ambient[:] = [1.0, 1.0, 1.0]
+            model.vis.headlight.diffuse[:] = [0.0, 0.0, 0.0]
+            model.vis.headlight.specular[:] = [0.0, 0.0, 0.0]
         
         # Prepare output frames for transforms.json
         output_frames = []
