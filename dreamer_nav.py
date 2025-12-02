@@ -2,7 +2,7 @@ import os
 import math
 import random
 from typing import List, Tuple
-
+import imageio
 import numpy as np
 import torch
 import torch.nn as nn
@@ -353,6 +353,19 @@ class DreamerV1:
         pathlib.Path("viz").mkdir(parents=True, exist_ok=True)
         vutils.save_image(imgs.clamp(0,1), os.path.join("viz", fname), nrow=imgs.size(0))
 
+    def _to_uint8_np(self, img_3chw: torch.Tensor) -> np.ndarray:
+        # img_3chw: [3,H,W] float in [0,1] or any real range
+        img = img_3chw.detach().float().clamp(0, 1).mul(255).byte()
+        return img.permute(1, 2, 0).cpu().numpy()  # [H,W,C] uint8
+
+    def _save_gif(self, frames, fname: str, fps: int = 8):
+        # frames: Tensor [T,3,H,W] or list of [3,H,W] tensors
+        pathlib.Path("viz").mkdir(parents=True, exist_ok=True)
+        if torch.is_tensor(frames):
+            frames = [frames[t] for t in range(frames.size(0))]
+        imgs = [self._to_uint8_np(f) for f in frames]
+        imageio.mimsave(os.path.join("viz", fname), imgs, duration=1.0 / max(fps, 1), loop=0)
+
     @torch.no_grad()
     def visualize_decoder(self, obs_batch, posts, deters, horizon_decode=15, step=0):
         # obs_batch: [B,T,3,H,W] in [0,1]
@@ -372,11 +385,16 @@ class DreamerV1:
         recon_row = torch.cat([target, recon_mean], dim=0)      # [2*(T-1),3,H,W]
         self._save_frame_grid(recon_row, f"recon_step_{step:06d}.png")
 
+        # GIFs: target-only, recon-only, and side-by-side per-frame
+        self._save_gif(target, f"gt_target_step_{step:06d}.gif", fps=8)
+        self._save_gif(recon_mean, f"recon_step_{step:06d}.gif", fps=8)
+        sbs_frames = [torch.cat([target[t], recon_mean[t]], dim=2) for t in range(target.size(0))]  # concat along width
+        self._save_gif(sbs_frames, f"recon_side_by_side_step_{step:06d}.gif", fps=8)
+
         # 2) Imagined future frames from last posterior state
         s_last = posts[b0, -1].float()    # [Z], cast to FP32
         h_last = deters[b0, -1].float()   # [H]
         s_list, h_list = [], []
-        # keep batch dim for GRUCell
         s = s_last.unsqueeze(0)  # [1,Z]
         h = h_last.unsqueeze(0)  # [1,H]
         for t in range(horizon_decode):
@@ -391,6 +409,7 @@ class DreamerV1:
         im_dist = self.decoder(s_im, h_im)                      # [1,H,3,H,W]
         im_mean = im_dist.base_dist.mean.squeeze(0)             # [H,3,H,W]
         self._save_frame_grid(im_mean, f"imagine_step_{step:06d}.png")
+        self._save_gif(im_mean, f"imagine_step_{step:06d}.gif", fps=8)
 
     def __init__(self, action_dim, img_size=(64, 64), device=None, cfg=None):
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
