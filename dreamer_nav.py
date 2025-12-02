@@ -9,7 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pathlib
 import torchvision.utils as vutils
-
+import datetime
+from torch.utils.tensorboard import SummaryWriter
 from mujoco_env import DroneXYZEnv  # same env as your current file
 
 
@@ -353,7 +354,7 @@ class DreamerV1:
         vutils.save_image(imgs.clamp(0,1), os.path.join("viz", fname), nrow=imgs.size(0))
 
     @torch.no_grad()
-    def visualize_decoder(self, obs_batch, posts, deters, horizon_decode=10, step=0):
+    def visualize_decoder(self, obs_batch, posts, deters, horizon_decode=15, step=0):
         # obs_batch: [B,T,3,H,W] in [0,1]
         B, T, C, H, W = obs_batch.shape
         b0 = 0  # visualize first batch item
@@ -396,12 +397,19 @@ class DreamerV1:
         if self.device.type == "cuda":
             torch.backends.cudnn.benchmark = True
 
+        logdir = os.path.join("runs", f"dreamer_nav_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        os.makedirs(logdir, exist_ok=True)
+        self.tb_writer = SummaryWriter(logdir)
+        self.logdir = logdir
+        print(f"TensorBoard logging to: {self.logdir}")
+        self._global_step = 0
+
         # Config
         default_cfg = dict(
             seed=42,
             total_iter=500,
             save_freq=200,
-            eval_freq=50,
+            eval_freq=5,
             collect_iter=10,
             data_init_ep=3,
             data_interact_ep=1,
@@ -412,9 +420,9 @@ class DreamerV1:
             kl_scale=1.0,
             discount=0.99,
             lambda_=0.95,
-            actor_lr=8e-5,
-            critic_lr=8e-5,
-            model_lr=6e-4,
+            actor_lr=4e-5,
+            critic_lr=4e-5,
+            model_lr=3e-4,
             clip_grad=100.0,
             continue_loss=True,
             log_every=50,
@@ -459,6 +467,39 @@ class DreamerV1:
 
         # Buffer
         self.buffer = ReplayBuffer(capacity_episodes=1000)
+
+    @torch.no_grad()
+    def evaluate(self, env: DroneXYZEnv, n_episodes=3, max_steps=1000):
+        returns = []
+        for ep in range(n_episodes):
+            obs, info = env.reset()
+            stoch, deter = self.rssm.init_state(1, self.device)
+            self.last_action = None
+            done = False
+            ep_ret = 0.0
+            steps = 0
+            while not done and steps < max_steps:
+                img_t = to_tensor_image_uint8(obs["image"], self.device).unsqueeze(0)
+                # act without exploration (deterministic mean)
+                stoch, deter, action = self.act(stoch, deter, img_t)
+                act_np = action.squeeze(0).cpu().numpy().astype(np.float32)
+                next_obs, reward, terminated, truncated, info = env.step(act_np)
+                done = terminated or truncated
+                ep_ret += float(reward)
+                obs = next_obs
+                steps += 1
+            returns.append(ep_ret)
+        avg_ret = float(np.mean(returns))
+        std_ret = float(np.std(returns)) if len(returns) > 1 else 0.0
+        print(f"[EVAL] episodes={n_episodes} avg_return={avg_ret:.3f} std={std_ret:.3f}")
+        # Log to TensorBoard
+        if hasattr(self, "tb_writer"):
+            # Use a global_step-like counter if available; fallback to 0
+            step = getattr(self, "_global_step", 0)
+            self.tb_writer.add_scalar("eval/avg_return", avg_ret, step)
+            self.tb_writer.add_scalar("eval/std_return", std_ret, step)
+            self.tb_writer.flush()
+        return avg_ret, std_ret
 
     # -------------------------
     # World model learning
@@ -635,7 +676,9 @@ class DreamerV1:
     def train(self, env: DroneXYZEnv):
         device = self.device
         H, W = self.img_size
-
+        # Running reward tracking
+        running_reward = 0.0
+        last_episode_reward = None
         # Prefill
         for _ in range(self.cfg["data_init_ep"]):
             self.buffer.start_episode()
@@ -664,6 +707,21 @@ class DreamerV1:
                 posts, deters, mstats = self.dynamic_learning(obs_b, act_b, rew_b, done_b)
                 bstats = self.behavioral_learning(posts, deters)
                 global_step += 1
+                self._global_step = global_step
+
+                self.tb_writer.add_scalar("model/kl", mstats["kl"], global_step)
+                self.tb_writer.add_scalar("model/recon_ll", mstats["recon"], global_step)
+                self.tb_writer.add_scalar("model/reward_ll", mstats["reward_ll"], global_step)
+                self.tb_writer.add_scalar("model/continue_ll", mstats["cont"], global_step)
+                self.tb_writer.add_scalar("model/total", mstats["model_total"], global_step)
+                self.tb_writer.add_scalar("behavior/actor_loss", bstats["actor_loss"], global_step)
+                self.tb_writer.add_scalar("behavior/critic_loss", bstats["critic_loss"], global_step)
+                # self.tb_writer.add_scalar("reward/running_reward", running_reward, global_step)
+                # if last_episode_reward is not None:
+                #     self.tb_writer.add_scalar("reward/episode_reward", last_episode_reward, global_step)
+                # Ensure data is written to disk frequently
+                if global_step % 10 == 0:
+                    self.tb_writer.flush()
 
                 if global_step % self.cfg["log_every"] == 0:
                     print(
@@ -674,6 +732,10 @@ class DreamerV1:
                         f"A={bstats['actor_loss']:.3f} C={bstats['critic_loss']:.3f}"
                     )
                     self.visualize_decoder(obs_b, posts, deters, horizon_decode=10, step=global_step)
+
+            # Periodic evaluation without exploration
+            if (it % self.cfg.get("eval_freq", 50)) == 0:
+                self.evaluate(env, n_episodes=self.cfg.get("eval_episodes", 3), max_steps=self.cfg.get("eval_max_steps", 1000))
 
             # Collect new data with current policy (1 episode)
             for _ in range(self.cfg["data_interact_ep"]):
@@ -693,6 +755,7 @@ class DreamerV1:
                     done = terminated or truncated
                     self.buffer.add(next_obs["image"], act_np, reward, done)
                     obs = next_obs
+        self.tb_writer.close()
 
         print("Training finished.")
 
