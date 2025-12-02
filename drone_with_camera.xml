@@ -1,0 +1,13 @@
+<mujoco model="drone">
+
+    <worldbody>
+        <body name="drone" pos="0 0 1">
+            <freejoint/>
+            <geom type="sphere" size="0.1" rgba="0.1 0.2 0.9 1"/>
+
+            <!-- Camera mounted on the drone -->
+            <camera name="drone_cam" pos="0 0 0.05" euler="90 0 0" fovy="130"/>
+        </body>
+    </worldbody>
+
+</mujoco>

@@ -1,3 +1,7 @@
 MeshSplatter/exports
 MeshSplatter/outputs
 MeshSplatter/*dataset
+*.gif
+*.pth
+nerfstudio_data/
+office*
