@@ -185,7 +185,8 @@ class DroneXYZEnv(gym.Env):
 
         obs = self._get_obs()
 
-        TARGET_POS_OF_CAMERA = np.array([1.4,1.4,1.05])
+        # TARGET_POS_OF_CAMERA = np.array([1.4,1.4,1.05]) # office
+        TARGET_POS_OF_CAMERA = np.array([3.0, 40.0, 1.0]) # warehouse
 
         new_distance = np.linalg.norm(obs['cam_c2w'][:3, 3] - TARGET_POS_OF_CAMERA)
         old_distance = np.linalg.norm(old_cam_pos - TARGET_POS_OF_CAMERA)

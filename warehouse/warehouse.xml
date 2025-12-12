@@ -1,4 +1,6 @@
-<mujoco model="merged_env"><asset><mesh name="mesh_0000" file="meshes/mesh_0000.obj" />
+<mujoco>
+  <asset>
+    <mesh name="mesh_0000" file="meshes/mesh_0000.obj" />
     <mesh name="mesh_0001" file="meshes/mesh_0001.obj" />
     <mesh name="mesh_0002" file="meshes/mesh_0002.obj" />
     <mesh name="mesh_0003" file="meshes/mesh_0003.obj" />
@@ -905,7 +907,10 @@
     <mesh name="mesh_0904" file="meshes/mesh_0904.obj" />
     <mesh name="mesh_0905" file="meshes/mesh_0905.obj" />
     <mesh name="mesh_0906" file="meshes/mesh_0906.obj" />
-  </asset><worldbody><geom name="mesh_0000_geom" type="mesh" mesh="mesh_0000" rgba="0.768627 0.792157 0.831373 1" />
+  </asset>
+
+  <worldbody>
+    <geom name="mesh_0000_geom" type="mesh" mesh="mesh_0000" rgba="0.768627 0.792157 0.831373 1" />
     <geom name="mesh_0001_geom" type="mesh" mesh="mesh_0001" rgba="0.760784 0.784314 0.823529 1" />
     <geom name="mesh_0002_geom" type="mesh" mesh="mesh_0002" rgba="0.745098 0.768627 0.807843 1" />
     <geom name="mesh_0003_geom" type="mesh" mesh="mesh_0003" rgba="0.741176 0.768627 0.803922 1" />
@@ -1812,11 +1817,5 @@
     <geom name="mesh_0904_geom" type="mesh" mesh="mesh_0904" rgba="0.913725 0.945098 0.960784 1" />
     <geom name="mesh_0905_geom" type="mesh" mesh="mesh_0905" rgba="0.949020 0.960784 0.964706 1" />
     <geom name="mesh_0906_geom" type="mesh" mesh="mesh_0906" rgba="0.635294 0.643137 0.647059 1" />
-  <body name="drone" pos="0 0 3">
-            <freejoint/>
-            <geom type="sphere" size="0.1" rgba="0.1 0.2 0.9 1" />
-
-            
-            <camera name="drone_cam" pos="0 0 0.05" euler="90 0 0" fovy="130" />
-        </body>
-</worldbody></mujoco>
+  </worldbody>
+</mujoco>

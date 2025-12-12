@@ -30,7 +30,7 @@ def seed_everything(seed=42):
 
 
 if __name__ == "__main__":
-    seed_everything(0)
+    seed_everything(1)
 
     # simple test
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -46,11 +46,20 @@ if __name__ == "__main__":
         device=device
     )
 
+
+    # env = DroneXYZEnv(
+    #     xml_path="office_0_quantized_16/merged_env.xml",
+    #     image_width=W,
+    #     image_height=H,
+    #     max_delta = 0.3
+    # )
+
     env = DroneXYZEnv(
-        xml_path="office_0_quantized_16/merged_env.xml",
+        xml_path="warehouse/merged_env.xml",
         image_width=W,
         image_height=H,
-        max_delta = 0.3
+        max_delta = 0.3,
+        horizon=100
     )
 
     predict_change_in_camera_mlp = torch.nn.Sequential(
@@ -74,10 +83,10 @@ if __name__ == "__main__":
 
     # --- Optimizer for both MLPs ---
     optimizer = torch.optim.Adam(
-        list(predict_change_in_camera_mlp.parameters()) + list(predict_reward_mlp.parameters()), lr=1e-3
+        list(predict_change_in_camera_mlp.parameters()) + list(predict_reward_mlp.parameters()), lr=1e-4
     )
 
-    num_epochs = 200
+    num_epochs = 30
     record_interval = 10000
     for _epoch in tqdm(range(num_epochs)):
         if _epoch % record_interval == 0:
@@ -86,7 +95,7 @@ if __name__ == "__main__":
         rendered_images = []
         actions = []
         obs, _ = env.reset()
-        for iters in range(10):
+        for iters in range(100):
             current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
             current_img = torch.from_numpy(obs['image']).float().to(device) / 255.0
 
@@ -147,7 +156,7 @@ if __name__ == "__main__":
 
 
     actions = [
-        (0.0, 0.1, 0.0) for i in range(100)
+        np.random.uniform(-1, 1, 3) for i in range(100)
     ]
     import numpy as np
 
@@ -190,19 +199,10 @@ if __name__ == "__main__":
 
     gif_images = []
     for i in range(len(actions)):
-        concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
-        gif_images.append((concat_img * 255).astype(np.uint8))
+        gif_images.append((gt_images[i] * 255).astype(np.uint8))
         # write the camera position on the image
         # You can use OpenCV or PIL to draw text on the image if needed
-
-        opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
-        position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
-        cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-        reward_text = f"Reward: {rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
+        
 
     imageio.mimsave('comparison.gif', gif_images, duration=0.1)
     print("Saved comparison.gif")
@@ -210,195 +210,195 @@ if __name__ == "__main__":
 
 
 
-    actions = [
-        (0.1, 0.1, 0.0) for i in range(100)
-    ]
-    import numpy as np
+    # actions = [
+    #     (0.1, 0.1, 0.0) for i in range(100)
+    # ]
+    # import numpy as np
 
-    gt_images = []
-    rendered_images = []
-    rewards = []
-    predicted_rewards = []
-    cam_pos = []
-    obs, _ = env.reset()
-    current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
-    for action in actions:
-        obs, reward, terminated, truncated, info = env.step(np.array(action))
+    # gt_images = []
+    # rendered_images = []
+    # rewards = []
+    # predicted_rewards = []
+    # cam_pos = []
+    # obs, _ = env.reset()
+    # current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
+    # for action in actions:
+    #     obs, reward, terminated, truncated, info = env.step(np.array(action))
 
-        rewards.append(reward)
+    #     rewards.append(reward)
 
-        gt_images.append(obs['image'] / 255.0)
+    #     gt_images.append(obs['image'] / 255.0)
 
-    for action in actions:
-        action_torch = torch.from_numpy(np.array(action)).float().to(device)
+    # for action in actions:
+    #     action_torch = torch.from_numpy(np.array(action)).float().to(device)
 
-        with torch.no_grad():
-            change_in_c2w = predict_change_in_camera_mlp(action_torch)
-        current_c2w[:3, 3] = current_c2w[:3, 3] + change_in_c2w
+    #     with torch.no_grad():
+    #         change_in_c2w = predict_change_in_camera_mlp(action_torch)
+    #     current_c2w[:3, 3] = current_c2w[:3, 3] + change_in_c2w
 
-        rendered = model.get_splat_render(
-            current_c2w[None, ...],
-            camera_intrinsics=torch.from_numpy(obs['intrinsics']).float().to(device)
-        )
-        rendered_rgb = rendered['rgb']  # H x W x 3
+    #     rendered = model.get_splat_render(
+    #         current_c2w[None, ...],
+    #         camera_intrinsics=torch.from_numpy(obs['intrinsics']).float().to(device)
+    #     )
+    #     rendered_rgb = rendered['rgb']  # H x W x 3
 
-        rendered_images.append(rendered_rgb.cpu().detach().numpy())
+    #     rendered_images.append(rendered_rgb.cpu().detach().numpy())
 
-        predicted_reward = predict_reward_mlp(action_torch)
-        predicted_rewards.append(predicted_reward.item())
+    #     predicted_reward = predict_reward_mlp(action_torch)
+    #     predicted_rewards.append(predicted_reward.item())
 
-        cam_pos.append(current_c2w[:3, 3].cpu().numpy())
+    #     cam_pos.append(current_c2w[:3, 3].cpu().numpy())
 
-    # save gifs with concatenated images
-    import imageio
+    # # save gifs with concatenated images
+    # import imageio
 
-    gif_images = []
-    for i in range(len(actions)):
-        concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
-        gif_images.append((concat_img * 255).astype(np.uint8))
-        # write the camera position on the image
-        # You can use OpenCV or PIL to draw text on the image if needed
+    # gif_images = []
+    # for i in range(len(actions)):
+    #     concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
+    #     gif_images.append((concat_img * 255).astype(np.uint8))
+    #     # write the camera position on the image
+    #     # You can use OpenCV or PIL to draw text on the image if needed
 
-        opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
-        position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
-        cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-        reward_text = f"Reward: {rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
+    #     opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
+    #     position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
+    #     cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+    #     reward_text = f"Reward: {rewards[i]:.2f}"
+    #     cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    #     reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
+    #     cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    #     gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
 
-    imageio.mimsave('comparison_2.gif', gif_images, duration=0.1)
-    print("Saved comparison_2.gif")
+    # imageio.mimsave('comparison_2.gif', gif_images, duration=0.1)
+    # print("Saved comparison_2.gif")
     
 
 
-    actions = [
-        (0.1, -0.1, 0.0) for i in range(100)
-    ]
-    import numpy as np
+    # actions = [
+    #     (0.1, -0.1, 0.0) for i in range(100)
+    # ]
+    # import numpy as np
 
-    gt_images = []
-    rendered_images = []
-    rewards = []
-    predicted_rewards = []
-    cam_pos = []
-    obs, _ = env.reset()
-    current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
-    for action in actions:
-        obs, reward, terminated, truncated, info = env.step(np.array(action))
+    # gt_images = []
+    # rendered_images = []
+    # rewards = []
+    # predicted_rewards = []
+    # cam_pos = []
+    # obs, _ = env.reset()
+    # current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
+    # for action in actions:
+    #     obs, reward, terminated, truncated, info = env.step(np.array(action))
 
-        rewards.append(reward)
+    #     rewards.append(reward)
 
-        gt_images.append(obs['image'] / 255.0)
+    #     gt_images.append(obs['image'] / 255.0)
 
-    for action in actions:
-        action_torch = torch.from_numpy(np.array(action)).float().to(device)
+    # for action in actions:
+    #     action_torch = torch.from_numpy(np.array(action)).float().to(device)
 
-        with torch.no_grad():
-            change_in_c2w = predict_change_in_camera_mlp(action_torch)
-        current_c2w[:3, 3] = current_c2w[:3, 3] + change_in_c2w
+    #     with torch.no_grad():
+    #         change_in_c2w = predict_change_in_camera_mlp(action_torch)
+    #     current_c2w[:3, 3] = current_c2w[:3, 3] + change_in_c2w
 
-        rendered = model.get_splat_render(
-            current_c2w[None, ...],
-            camera_intrinsics=torch.from_numpy(obs['intrinsics']).float().to(device)
-        )
-        rendered_rgb = rendered['rgb']  # H x W x 3
+    #     rendered = model.get_splat_render(
+    #         current_c2w[None, ...],
+    #         camera_intrinsics=torch.from_numpy(obs['intrinsics']).float().to(device)
+    #     )
+    #     rendered_rgb = rendered['rgb']  # H x W x 3
 
-        rendered_images.append(rendered_rgb.cpu().detach().numpy())
+    #     rendered_images.append(rendered_rgb.cpu().detach().numpy())
 
-        predicted_reward = predict_reward_mlp(action_torch)
-        predicted_rewards.append(predicted_reward.item())
+    #     predicted_reward = predict_reward_mlp(action_torch)
+    #     predicted_rewards.append(predicted_reward.item())
 
-        cam_pos.append(current_c2w[:3, 3].cpu().numpy())
+    #     cam_pos.append(current_c2w[:3, 3].cpu().numpy())
 
-    # save gifs with concatenated images
-    import imageio
+    # # save gifs with concatenated images
+    # import imageio
 
-    gif_images = []
-    for i in range(len(actions)):
-        concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
-        gif_images.append((concat_img * 255).astype(np.uint8))
-        # write the camera position on the image
-        # You can use OpenCV or PIL to draw text on the image if needed
+    # gif_images = []
+    # for i in range(len(actions)):
+    #     concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
+    #     gif_images.append((concat_img * 255).astype(np.uint8))
+    #     # write the camera position on the image
+    #     # You can use OpenCV or PIL to draw text on the image if needed
 
-        opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
-        position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
-        cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-        reward_text = f"Reward: {rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
+    #     opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
+    #     position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
+    #     cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+    #     reward_text = f"Reward: {rewards[i]:.2f}"
+    #     cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    #     reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
+    #     cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    #     gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
 
-    imageio.mimsave('comparison_3.gif', gif_images, duration=0.1)
-    print("Saved comparison_3.gif")
+    # imageio.mimsave('comparison_3.gif', gif_images, duration=0.1)
+    # print("Saved comparison_3.gif")
 
 
 
-    actions = [
-        env.action_space.sample() for i in range(100)
-    ]
-    import numpy as np
+    # actions = [
+    #     env.action_space.sample() for i in range(100)
+    # ]
+    # import numpy as np
 
-    gt_images = []
-    rendered_images = []
-    rewards = []
-    predicted_rewards = []
-    cam_pos = []
-    obs, _ = env.reset()
-    current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
-    for action in actions:
-        obs, reward, terminated, truncated, info = env.step(np.array(action))
+    # gt_images = []
+    # rendered_images = []
+    # rewards = []
+    # predicted_rewards = []
+    # cam_pos = []
+    # obs, _ = env.reset()
+    # current_c2w = torch.from_numpy(obs['cam_c2w']).float().to(device)
+    # for action in actions:
+    #     obs, reward, terminated, truncated, info = env.step(np.array(action))
 
-        rewards.append(reward)
+    #     rewards.append(reward)
 
-        gt_images.append(obs['image'] / 255.0)
+    #     gt_images.append(obs['image'] / 255.0)
 
-    for action in actions:
-        action_torch = torch.from_numpy(np.array(action)).float().to(device)
+    # for action in actions:
+    #     action_torch = torch.from_numpy(np.array(action)).float().to(device)
 
-        with torch.no_grad():
-            change_in_c2w = predict_change_in_camera_mlp(action_torch)
-        current_c2w[:3, 3] = current_c2w[:3, 3] + change_in_c2w
+    #     with torch.no_grad():
+    #         change_in_c2w = predict_change_in_camera_mlp(action_torch)
+    #     current_c2w[:3, 3] = current_c2w[:3, 3] + change_in_c2w
 
-        rendered = model.get_splat_render(
-            current_c2w[None, ...],
-            camera_intrinsics=torch.from_numpy(obs['intrinsics']).float().to(device)
-        )
-        rendered_rgb = rendered['rgb']  # H x W x 3
+    #     rendered = model.get_splat_render(
+    #         current_c2w[None, ...],
+    #         camera_intrinsics=torch.from_numpy(obs['intrinsics']).float().to(device)
+    #     )
+    #     rendered_rgb = rendered['rgb']  # H x W x 3
 
-        rendered_images.append(rendered_rgb.cpu().detach().numpy())
+    #     rendered_images.append(rendered_rgb.cpu().detach().numpy())
 
-        predicted_reward = predict_reward_mlp(action_torch)
-        predicted_rewards.append(predicted_reward.item())
+    #     predicted_reward = predict_reward_mlp(action_torch)
+    #     predicted_rewards.append(predicted_reward.item())
 
-        cam_pos.append(current_c2w[:3, 3].cpu().numpy())
+    #     cam_pos.append(current_c2w[:3, 3].cpu().numpy())
 
-    # save gifs with concatenated images
-    import imageio
+    # # save gifs with concatenated images
+    # import imageio
 
-    gif_images = []
-    for i in range(len(actions)):
-        concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
-        gif_images.append((concat_img * 255).astype(np.uint8))
-        # write the camera position on the image
-        # You can use OpenCV or PIL to draw text on the image if needed
+    # gif_images = []
+    # for i in range(len(actions)):
+    #     concat_img = np.concatenate([gt_images[i], rendered_images[i]], axis=1)
+    #     gif_images.append((concat_img * 255).astype(np.uint8))
+    #     # write the camera position on the image
+    #     # You can use OpenCV or PIL to draw text on the image if needed
 
-        opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
-        position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
-        cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-        reward_text = f"Reward: {rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
-        cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-        gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
+    #     opencv_img = cv2.cvtColor(gif_images[-1], cv2.COLOR_RGB2BGR)
+    #     position_text = f"Cam Pos: {cam_pos[i][0]:.2f}, {cam_pos[i][1]:.2f}, {cam_pos[i][2]:.2f}"
+    #     cv2.putText(opencv_img, position_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+    #     reward_text = f"Reward: {rewards[i]:.2f}"
+    #     cv2.putText(opencv_img, reward_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    #     reward_text = f"Predicted Reward: {predicted_rewards[i]:.2f}"
+    #     cv2.putText(opencv_img, reward_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    #     gif_images[-1] = cv2.cvtColor(opencv_img, cv2.COLOR_BGR2RGB)
 
-    imageio.mimsave('comparison_4.gif', gif_images, duration=0.1)
-    print("Saved comparison_4.gif")
+    # imageio.mimsave('comparison_4.gif', gif_images, duration=0.1)
+    # print("Saved comparison_4.gif")
 
 
     torch.save({
         'predict_change_in_camera_mlp': predict_change_in_camera_mlp,
         'predict_reward_mlp': predict_reward_mlp,
-    }, 'gauss_dreamer_pt2_dynamics_model.pth')
+    }, f'gauss_dreamer_pt2_dynamics_model_{num_epochs}.pth')

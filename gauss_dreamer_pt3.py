@@ -5,8 +5,6 @@ from mujoco_env import DroneXYZEnv
 from gauss_dreamer import DynamicsModel as GaussianSplatRenderer
 import numpy as np
 from gauss_dreamer_pt2 import seed_everything
-import imageio
-import os
 
 ###############################################################################
 #   PIXEL ENCODER    (shared across actor & critic)
@@ -248,7 +246,7 @@ def train_dreamer(
     dynamics,
     optim_actor,
     optim_critic,
-    num_steps=100000,
+    num_steps=200,
     imagination_horizon=3,
     print_every=100,
     reward_alpha=0.01,
@@ -302,6 +300,9 @@ def train_dreamer(
         if terminated or truncated:
             last_episode_reward = episode_reward
             episode_reward = 0.0
+
+            last_drone_pos = real_c2w[0, :3, 3]
+            print(f"Last drone position: {last_drone_pos}")
             obs, info = env.reset()
             real_image = torch.tensor(
                 obs["image"] / 255.0, dtype=torch.float32, device=device
@@ -309,12 +310,13 @@ def train_dreamer(
             real_c2w = torch.tensor(
                 obs["cam_c2w"], dtype=torch.float32, device=device
             ).unsqueeze(0)
+
         else:
             last_episode_reward = None
 
         if step % print_every == 0:
             msg = (
-                f"[step {step}] "
+                f"[dynamic models step {step}] "
                 f"actor_loss={stats['actor_loss']:.4f} "
                 f"critic_loss={stats['critic_loss']:.4f} "
                 f"avg_reward={running_reward:.3f}"
@@ -370,24 +372,33 @@ class DynamicsModelWrapper(nn.Module):
 ###############################################################################
 
 if __name__ == "__main__":
-    seed_everything(42)
+    seed_everything(40)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     W = 300
     H = 300
 
+    # env = DroneXYZEnv(
+    #     xml_path="office_0_quantized_16/merged_env.xml",
+    #     image_width=W,
+    #     image_height=H,
+    #     max_delta=0.3,
+    # )
+
+
     env = DroneXYZEnv(
-        xml_path="office_0_quantized_16/merged_env.xml",
+        xml_path="warehouse/merged_env.xml",
         image_width=W,
         image_height=H,
-        max_delta=0.3,
+        max_delta = 0.3,
+        horizon=100
     )
 
     start_obs, info = env.reset()
 
     # Load ENTIRE objects (your choice)
     world_dynamics = torch.load(
-        "gauss_dreamer_pt2_dynamics_model.pth",
+        "gauss_dreamer_pt2_dynamics_model_30.pth",
         map_location=device
     )
 
@@ -426,7 +437,7 @@ if __name__ == "__main__":
         dynamics=dynamics,
         optim_actor=optim_actor,
         optim_critic=optim_critic,
-        num_steps=20000,
+        num_steps=600,
         imagination_horizon=15,
         print_every=50,
     )

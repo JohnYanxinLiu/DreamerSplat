@@ -236,6 +236,11 @@ tifffile==2025.5.10
 timm==0.6.7
 tinycss2==1.4.0
 tomli==2.3.0
+torch==2.5.1+cu121
+torch-fidelity==0.3.0
+torchaudio==2.5.1+cu121
+torchmetrics==1.8.2
+torchvision==0.20.1+cu121
 tornado==6.5.2
 tqdm==4.67.1
 traitlets==5.14.3

@@ -1,7 +1,6 @@
-MeshSplatter/exports
-MeshSplatter/outputs
-MeshSplatter/*dataset
-*.gif
+*.obj
+*.ply
+*.png
+*.zip
 *.pth
-nerfstudio_data/
-office*
+*.ckpt
