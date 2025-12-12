@@ -177,6 +177,12 @@ class DroneXYZEnv(gym.Env):
 
 
         old_cam_pos = self._get_obs()['cam_c2w'][:3, 3].copy()
+
+
+        if old_cam_pos[0] < -3 or old_cam_pos[0] > 3:
+            action[0] = 0
+
+        
         delta = np.clip(action, -1, 1) * self.max_delta
         if self.no_z_movement:
             delta[2] = 0
@@ -202,13 +208,7 @@ class DroneXYZEnv(gym.Env):
         # make reward positive for going in +y
         cam_pos = obs['cam_c2w'][:3, 3]
         reward = cam_pos[1] - old_cam_pos[1]
-        
-        # make it so that going in any direction in x reduces reward
-        reward -= abs(cam_pos[0] - old_cam_pos[0]) * 0.5
-
-
-        if cam_pos[0] < -3 or cam_pos[0] > 3:
-            done = True
+                    
         
         return obs, reward, done, False, {}
 
