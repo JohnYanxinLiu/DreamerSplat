@@ -198,6 +198,17 @@ class DroneXYZEnv(gym.Env):
             done = True
         else:
             done = False
+
+        # make reward positive for going in +y
+        cam_pos = obs['cam_c2w'][:3, 3]
+        reward = cam_pos[1] - old_cam_pos[1]
+        
+        # make it so that going in any direction in x reduces reward
+        reward -= abs(cam_pos[0] - old_cam_pos[0]) * 0.5
+
+
+        if cam_pos[0] < -3 or cam_pos[0] > 3:
+            done = True
         
         return obs, reward, done, False, {}
 
